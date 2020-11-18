@@ -1,12 +1,12 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"os"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -17,8 +17,11 @@ import (
 // kubectl get pods
 //
 func main() {
-	var ns string
-	flag.StringVar(&ns, "namespace", "", "namespace")
+	rNs := os.Args[1]
+
+	if rNs == "" {
+		fmt.Println("no namespace requested")
+	}
 
 	// Bootstrap k8s configuration from local 	Kubernetes config file
 	//kubeconfig := filepath.Join(os.Getenv("HOME"), ".kube", "config")
@@ -35,36 +38,38 @@ func main() {
 		log.Fatal(err)
 	}
 
-	nsNew, err := clientset.CoreV1().Namespaces().Create(requestNamepace())
+	//create namespace
+	nsNew, err := clientset.CoreV1().Namespaces().Create(requestNamepace(rNs))
 	if err != nil {
-		log.Fatalln("error creating namespace: ", err)
+		if errors.IsAlreadyExists(err) {
+			fmt.Println("namespace exist", rNs)
+		} else {
+			log.Fatalln("error creating namespace: ", err)
+		}
+	} else {
+		fmt.Println("namespace created", nsNew.Name)
 	}
-	fmt.Println("namespace created", nsNew.Name)
 
+	//get all namespaces
 	allns, err := clientset.CoreV1().Namespaces().List(metav1.ListOptions{})
 	if err != nil {
 		log.Fatalln("failed to get namespace:", err)
 	}
 
+	//show namespaces
 	for n, nns := range allns.Items {
 		fmt.Printf("[%d] %s\n", n, nns.Name)
 	}
-
-	pods, err := clientset.CoreV1().Pods("").List(metav1.ListOptions{})
-	if err != nil {
-		log.Fatalln("failed to get pods:", err)
-	}
-
-	// print pods
-	for i, pod := range pods.Items {
-		fmt.Printf("[%d] %s\n", i, pod.GetName())
-	}
 }
 
-func requestNamepace() *v1.Namespace {
+func requestNamepace(namepace string) *v1.Namespace {
+	if namepace == "" {
+		return nil
+	}
+
 	return &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "gc-namepace",
+			Name: namepace,
 		},
 	}
 }
